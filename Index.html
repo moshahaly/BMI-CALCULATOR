@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ff99cc">
+    <title>Dr/Hadeer Special BMI Calculator</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.png">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #ff99cc, #ff66b3);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        h1 {
+            color: #ff3399;
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 1.8rem;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.8rem;
+            border: 2px solid #ff66b3;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #ff3399;
+            box-shadow: 0 0 5px rgba(255, 51, 153, 0.3);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        button {
+            flex: 1;
+            padding: 1rem;
+            background: #ff3399;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #ff66b3;
+            transform: translateY(-2px);
+        }
+
+        #resetBtn {
+            background: #ff66b3;
+        }
+
+        #resetBtn:hover {
+            background: #ff3399;
+        }
+
+        #aboutBtn {
+            background: #ff80bf;
+        }
+
+        #aboutBtn:hover {
+            background: #ff4da6;
+        }
+
+        #result {
+            margin-top: 2rem;
+            text-align: center;
+            padding: 1rem;
+            border-radius: 10px;
+            background: rgba(255, 230, 242, 0.8);
+            display: none;
+        }
+
+        .bmi-value {
+            color: #ff3399;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .diagnosis {
+            color: #333;
+            font-size: 1.1rem;
+        }
+
+        .error {
+            color: #ff0000;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            max-width: 90%;
+            width: 300px;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 1.5rem;
+            color: #ff3399;
+            cursor: pointer;
+            border: none;
+            background: none;
+        }
+
+        .modal-content p {
+            margin: 1rem 0;
+            color: #333;
+        }
+
+        .modal-content a {
+            color: #ff3399;
+            text-decoration: none;
+        }
+
+        .modal-content a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Dr/Hadeer Salah Special BMI Calculator</h1>
+        <form id="bmiForm">
+            <div class="input-group">
+                <label for="weight">Weight (kg)</label>
+                <input type="number" id="weight" step="0.1" min="0" required>
+            </div>
+            <div class="input-group">
+                <label for="height">Height (cm)</label>
+                <input type="number" id="height" step="0.1" min="0" required>
+            </div>
+            <div class="button-group">
+                <button type="button" id="calculateBtn">Calculate BMI</button>
+                <button type="button" id="resetBtn">Reset</button>
+                <button type="button" id="aboutBtn">About</button>
+            </div>
+        </form>
+        <div id="result">
+            <div class="bmi-value" id="bmiValue"></div>
+            <div class="diagnosis" id="diagnosis"></div>
+            <div class="error" id="errorMsg"></div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content">
+            <button class="close-btn" id="closeModal">&times;</button>
+            <p>BMI-CALCULATOR version 1.0</p>
+            <p>Based on most recent BMI classifications</p>
+            <p><a href="https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html" target="_blank">Learn more at CDC</a></p>
+        </div>
+    </div>
+
+    <script>
+        console.log('Script loaded');
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(reg => console.log('Service Worker registered'))
+                    .catch(err => console.log('Service Worker registration failed:', err));
+            });
+        }
+
+        const calculateBtn = document.getElementById('calculateBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const aboutBtn = document.getElementById('aboutBtn');
+        const resultDiv = document.getElementById('result');
+        const bmiValue = document.getElementById('bmiValue');
+        const diagnosis = document.getElementById('diagnosis');
+        const errorMsg = document.getElementById('errorMsg');
+        const weightInput = document.getElementById('weight');
+        const heightInput = document.getElementById('height');
+        const aboutModal = document.getElementById('aboutModal');
+        const closeModal = document.getElementById('closeModal');
+
+        console.log('Elements:', { calculateBtn, resetBtn, aboutBtn, resultDiv, bmiValue, diagnosis, errorMsg });
+
+        function calculateBMI(weight, height) {
+            const heightInMeters = height / 100;
+            const bmi = weight / (heightInMeters * heightInMeters);
+            return bmi.toFixed(1);
+        }
+
+        function getDiagnosis(bmi) {
+            if (bmi < 18.5) return 'Underweight';
+            if (bmi < 25) return 'Normal Weight';
+            if (bmi < 30) return 'Overweight';
+            if (bmi < 35) return 'Obese (Class I)';
+            if (bmi < 40) return 'Obese (Class II)';
+            return 'Obese (Class III)';
+        }
+
+        if (calculateBtn) {
+            calculateBtn.addEventListener('click', () => {
+                console.log('Calculate button clicked');
+                resultDiv.style.display = 'none';
+                errorMsg.textContent = '';
+
+                const weight = parseFloat(weightInput.value);
+                const height = parseFloat(heightInput.value);
+
+                console.log('Input values:', { weight, height });
+
+                if (isNaN(weight) || isNaN(height)) {
+                    errorMsg.textContent = 'Please enter valid numbers';
+                    resultDiv.style.display = 'block';
+                    return;
+                }
+
+                if (weight <= 0 || height <= 0) {
+                    errorMsg.textContent = 'Please enter positive values';
+                    resultDiv.style.display = 'block';
+                    return;
+                }
+
+                const bmi = calculateBMI(weight, height);
+                const diagText = getDiagnosis(parseFloat(bmi));
+
+                console.log('Results:', { bmi, diagnosis: diagText });
+
+                bmiValue.textContent = `BMI: ${bmi}`;
+                diagnosis.textContent = `Diagnosis: ${diagText}`;
+                resultDiv.style.display = 'block';
+            });
+        }
+
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                console.log('Reset button clicked');
+                weightInput.value = '';
+                heightInput.value = '';
+                resultDiv.style.display = 'none';
+                errorMsg.textContent = '';
+                bmiValue.textContent = '';
+                diagnosis.textContent = '';
+            });
+        }
+
+        if (aboutBtn) {
+            aboutBtn.addEventListener('click', () => {
+                console.log('About button clicked');
+                aboutModal.style.display = 'flex';
+            });
+        }
+
+        if (closeModal) {
+            closeModal.addEventListener('click', () => {
+                console.log('Close modal clicked');
+                aboutModal.style.display = 'none';
+            });
+        }
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (event) => {
+            if (event.target === aboutModal) {
+                aboutModal.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
