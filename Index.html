@@ -9,7 +9,6 @@
     <link rel="icon" href="icon-192.png">
 
     <style>
-        /* [Previous CSS remains unchanged] */
         * {
             margin: 0;
             padding: 0;
@@ -29,10 +28,12 @@
         .container {
             background: rgba(255, 255, 255, 0.95);
             padding: 2rem;
+            padding-bottom: 4rem; /* Increased bottom padding for update button */
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             width: 100%;
             max-width: 400px;
+            position: relative;
         }
 
         h1 {
@@ -40,6 +41,7 @@
             text-align: center;
             margin-bottom: 2rem;
             font-size: 1.8rem;
+            line-height: 1.2;
         }
 
         .input-group {
@@ -91,24 +93,30 @@
             transform: translateY(-2px);
         }
 
-        #resetBtn {
-            background: #ff66b3;
-        }
+        #resetBtn { background: #ff66b3; }
+        #resetBtn:hover { background: #ff3399; }
+        #aboutBtn { background: #ff80bf; }
+        #aboutBtn:hover { background: #ff4da6; }
 
-        #resetBtn:hover {
-            background: #ff3399;
-        }
-
-        #aboutBtn {
-            background: #ff80bf;
-        }
-
-        #aboutBtn:hover {
+        #updateBtn {
+            position: absolute;
+            bottom: 10px; /* Moved to bottom */
+            right: 10px;
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
             background: #ff4da6;
+            min-width: 0;
+            flex: none;
+        }
+
+        #updateBtn:hover {
+            background: #ff80bf;
+            transform: translateY(-1px);
         }
 
         #result {
             margin-top: 2rem;
+            margin-bottom: 1rem; /* Added margin to avoid overlap with update button */
             text-align: center;
             padding: 1rem;
             border-radius: 10px;
@@ -116,23 +124,9 @@
             display: none;
         }
 
-        .bmi-value {
-            color: #ff3399;
-            font-size: 1.5rem;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-        }
-
-        .diagnosis {
-            color: #333;
-            font-size: 1.1rem;
-        }
-
-        .error {
-            color: #ff0000;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-        }
+        .bmi-value { color: #ff3399; font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem; }
+        .diagnosis { color: #333; font-size: 1.1rem; }
+        .error { color: #ff0000; font-size: 0.9rem; margin-top: 0.5rem; }
 
         .modal {
             display: none;
@@ -168,24 +162,15 @@
             background: none;
         }
 
-        .modal-content p {
-            margin: 1rem 0;
-            color: #333;
-        }
-
-        .modal-content a {
-            color: #ff3399;
-            text-decoration: none;
-        }
-
-        .modal-content a:hover {
-            text-decoration: underline;
-        }
+        .modal-content p { margin: 1rem 0; color: #333; }
+        .modal-content a { color: #ff3399; text-decoration: none; }
+        .modal-content a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Dr/Hadeer Salah Special BMI Calculator</h1>
+        <h1>Dr/Hadeer Special BMI Calculator</h1>
+        <button type="button" id="updateBtn">Update</button>
         <form id="bmiForm">
             <div class="input-group">
                 <label for="weight">Weight (kg)</label>
@@ -211,7 +196,7 @@
     <div id="aboutModal" class="modal">
         <div class="modal-content">
             <button class="close-btn" id="closeModal">×</button>
-            <p>BMI-CALCULATOR version 1.01</p>
+            <p>BMI-CALCULATOR version 1.0</p>
             <p>Based on most recent BMI classifications</p>
             <p><a href="https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html" target="_blank">Learn more at CDC</a></p>
         </div>
@@ -219,24 +204,23 @@
 
     <script>
         console.log('Script loaded');
+        const CURRENT_VERSION = '1.0';
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/service-worker.js')
                     .then(reg => {
                         console.log('Service Worker registered with scope:', reg.scope);
+                        checkForUpdates(reg);
                     })
-                    .catch(err => {
-                        console.error('Service Worker registration failed:', err);
-                    });
+                    .catch(err => console.error('Service Worker registration failed:', err));
             });
-        } else {
-            console.log('Service Worker not supported in this browser');
         }
 
         const calculateBtn = document.getElementById('calculateBtn');
         const resetBtn = document.getElementById('resetBtn');
         const aboutBtn = document.getElementById('aboutBtn');
+        const updateBtn = document.getElementById('updateBtn');
         const resultDiv = document.getElementById('result');
         const bmiValue = document.getElementById('bmiValue');
         const diagnosis = document.getElementById('diagnosis');
@@ -245,8 +229,6 @@
         const heightInput = document.getElementById('height');
         const aboutModal = document.getElementById('aboutModal');
         const closeModal = document.getElementById('closeModal');
-
-        console.log('Elements:', { calculateBtn, resetBtn, aboutBtn, resultDiv, bmiValue, diagnosis, errorMsg });
 
         function calculateBMI(weight, height) {
             const heightInMeters = height / 100;
@@ -263,71 +245,96 @@
             return 'Obese (Class III)';
         }
 
-        if (calculateBtn) {
-            calculateBtn.addEventListener('click', () => {
-                console.log('Calculate button clicked');
-                resultDiv.style.display = 'none';
-                errorMsg.textContent = '';
-
-                const weight = parseFloat(weightInput.value);
-                const height = parseFloat(heightInput.value);
-
-                console.log('Input values:', { weight, height });
-
-                if (isNaN(weight) || isNaN(height)) {
-                    errorMsg.textContent = 'Please enter valid numbers';
-                    resultDiv.style.display = 'block';
-                    return;
-                }
-
-                if (weight <= 0 || height <= 0) {
-                    errorMsg.textContent = 'Please enter positive values';
-                    resultDiv.style.display = 'block';
-                    return;
-                }
-
-                const bmi = calculateBMI(weight, height);
-                const diagText = getDiagnosis(parseFloat(bmi));
-
-                console.log('Results:', { bmi, diagnosis: diagText });
-
-                bmiValue.textContent = `BMI: ${bmi}`;
-                diagnosis.textContent = `Diagnosis: ${diagText}`;
+        calculateBtn.addEventListener('click', () => {
+            resultDiv.style.display = 'none';
+            errorMsg.textContent = '';
+            const weight = parseFloat(weightInput.value);
+            const height = parseFloat(heightInput.value);
+            if (isNaN(weight) || isNaN(height)) {
+                errorMsg.textContent = 'Please enter valid numbers';
                 resultDiv.style.display = 'block';
-            });
-        }
+                return;
+            }
+            if (weight <= 0 || height <= 0) {
+                errorMsg.textContent = 'Please enter positive values';
+                resultDiv.style.display = 'block';
+                return;
+            }
+            const bmi = calculateBMI(weight, height);
+            const diagText = getDiagnosis(parseFloat(bmi));
+            bmiValue.textContent = `BMI: ${bmi}`;
+            diagnosis.textContent = `Diagnosis: ${diagText}`;
+            resultDiv.style.display = 'block';
+        });
 
-        if (resetBtn) {
-            resetBtn.addEventListener('click', () => {
-                console.log('Reset button clicked');
-                weightInput.value = '';
-                heightInput.value = '';
-                resultDiv.style.display = 'none';
-                errorMsg.textContent = '';
-                bmiValue.textContent = '';
-                diagnosis.textContent = '';
-            });
-        }
+        resetBtn.addEventListener('click', () => {
+            weightInput.value = '';
+            heightInput.value = '';
+            resultDiv.style.display = 'none';
+            errorMsg.textContent = '';
+            bmiValue.textContent = '';
+            diagnosis.textContent = '';
+        });
 
-        if (aboutBtn) {
-            aboutBtn.addEventListener('click', () => {
-                console.log('About button clicked');
-                aboutModal.style.display = 'flex';
-            });
-        }
+        aboutBtn.addEventListener('click', () => {
+            aboutModal.style.display = 'flex';
+        });
 
-        if (closeModal) {
-            closeModal.addEventListener('click', () => {
-                console.log('Close modal clicked');
-                aboutModal.style.display = 'none';
-            });
-        }
+        closeModal.addEventListener('click', () => {
+            aboutModal.style.display = 'none';
+        });
+
+        updateBtn.addEventListener('click', () => {
+            console.log('Update button clicked');
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistration().then(reg => {
+                    reg.update().then(() => {
+                        console.log('Service Worker updated');
+                        window.location.reload(true);
+                    }).catch(err => console.error('Service Worker update failed:', err));
+                });
+            }
+        });
 
         window.addEventListener('click', (event) => {
             if (event.target === aboutModal) {
                 aboutModal.style.display = 'none';
             }
         });
+
+        function checkForUpdates(registration) {
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/version.json');
+                    const data = await response.json();
+                    if (data.version !== CURRENT_VERSION) {
+                        showUpdateNotification(registration);
+                    }
+                } catch (err) {
+                    console.error('Failed to check for updates:', err);
+                }
+            }, 60000);
+        }
+
+        function showUpdateNotification(registration) {
+            if (Notification.permission === 'granted') {
+                registration.showNotification('Update Available', {
+                    body: 'A new version of the BMI Calculator is available! Click Update to refresh.',
+                    icon: '/icon-192.png',
+                    badge: '/icon-192.png'
+                });
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        registration.showNotification('Update Available', {
+                            body: 'A new version of the BMI Calculator is available! Click Update to refresh.',
+                            icon: '/icon-192.png',
+                            badge: '/icon-192.png'
+                        });
+                    }
+                });
+            }
+        }
     </script>
 </body>
 </html>
