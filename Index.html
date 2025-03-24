@@ -28,7 +28,7 @@
         .container {
             background: rgba(255, 255, 255, 0.95);
             padding: 2rem;
-            padding-bottom: 4rem; /* Increased bottom padding for update button */
+            padding-bottom: 4rem;
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             width: 100%;
@@ -100,7 +100,7 @@
 
         #updateBtn {
             position: absolute;
-            bottom: 10px; /* Moved to bottom */
+            bottom: 10px;
             right: 10px;
             padding: 0.5rem 1rem;
             font-size: 0.9rem;
@@ -116,7 +116,7 @@
 
         #result {
             margin-top: 2rem;
-            margin-bottom: 1rem; /* Added margin to avoid overlap with update button */
+            margin-bottom: 1rem;
             text-align: center;
             padding: 1rem;
             border-radius: 10px;
@@ -169,7 +169,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Dr/Hadeer Salah Special BMI Calculator</h1>
+        <h1>Dr/Hadeer Special BMI Calculator</h1>
         <button type="button" id="updateBtn">Update</button>
         <form id="bmiForm">
             <div class="input-group">
@@ -204,14 +204,12 @@
 
     <script>
         console.log('Script loaded');
-        const CURRENT_VERSION = '1.0';
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/service-worker.js')
                     .then(reg => {
                         console.log('Service Worker registered with scope:', reg.scope);
-                        checkForUpdates(reg);
                     })
                     .catch(err => console.error('Service Worker registration failed:', err));
             });
@@ -286,14 +284,8 @@
 
         updateBtn.addEventListener('click', () => {
             console.log('Update button clicked');
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistration().then(reg => {
-                    reg.update().then(() => {
-                        console.log('Service Worker updated');
-                        window.location.reload(true);
-                    }).catch(err => console.error('Service Worker update failed:', err));
-                });
-            }
+            // Force a full reload from the server, bypassing cache
+            window.location.reload(true);
         });
 
         window.addEventListener('click', (event) => {
@@ -301,40 +293,6 @@
                 aboutModal.style.display = 'none';
             }
         });
-
-        function checkForUpdates(registration) {
-            setInterval(async () => {
-                try {
-                    const response = await fetch('/version.json');
-                    const data = await response.json();
-                    if (data.version !== CURRENT_VERSION) {
-                        showUpdateNotification(registration);
-                    }
-                } catch (err) {
-                    console.error('Failed to check for updates:', err);
-                }
-            }, 60000);
-        }
-
-        function showUpdateNotification(registration) {
-            if (Notification.permission === 'granted') {
-                registration.showNotification('Update Available', {
-                    body: 'A new version of the BMI Calculator is available! Click Update to refresh.',
-                    icon: '/icon-192.png',
-                    badge: '/icon-192.png'
-                });
-            } else if (Notification.permission !== 'denied') {
-                Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                        registration.showNotification('Update Available', {
-                            body: 'A new version of the BMI Calculator is available! Click Update to refresh.',
-                            icon: '/icon-192.png',
-                            badge: '/icon-192.png'
-                        });
-                    }
-                });
-            }
-        }
     </script>
 </body>
 </html>
