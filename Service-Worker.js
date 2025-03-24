@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bmi-calculator-v4';
+const CACHE_NAME = 'bmi-calculator-v5';
 const FILES_TO_CACHE = [
   '/',
   '/index.html',
