@@ -55,7 +55,7 @@
             font-weight: 500;
         }
 
-        input {
+        input, select {
             width: 100%;
             padding: 0.8rem;
             border: 2px solid #ff66b3;
@@ -64,16 +64,22 @@
             transition: all 0.3s ease;
         }
 
-        input:focus {
+        input:focus, select:focus {
             outline: none;
             border-color: #ff3399;
             box-shadow: 0 0 5px rgba(255, 51, 153, 0.3);
+        }
+
+        .input-error {
+            border-color: #ff0000;
+            background: #ffe6e6;
         }
 
         .button-group {
             display: flex;
             gap: 1rem;
             margin-top: 1rem;
+            flex-wrap: wrap;
         }
 
         button {
@@ -91,6 +97,11 @@
         button:hover {
             background: #ff66b3;
             transform: translateY(-2px);
+        }
+
+        .button-loading {
+            opacity: 0.7;
+            cursor: not-allowed;
         }
 
         #resetBtn { background: #ff66b3; }
@@ -173,12 +184,19 @@
         <button type="button" id="updateBtn">Update</button>
         <form id="bmiForm">
             <div class="input-group">
-                <label for="weight">Weight (kg)</label>
-                <input type="number" id="weight" step="0.1" min="0" required>
+                <label>Units:</label>
+                <select id="unitSystem">
+                    <option value="metric">Metric (kg/cm)</option>
+                    <option value="imperial">Imperial (lbs/in)</option>
+                </select>
             </div>
             <div class="input-group">
-                <label for="height">Height (cm)</label>
-                <input type="number" id="height" step="0.1" min="0" required>
+                <label for="weight">Weight <span id="weightUnit">(kg)</span></label>
+                <input type="number" id="weight" step="0.1" min="0" required aria-label="Weight">
+            </div>
+            <div class="input-group">
+                <label for="height">Height <span id="heightUnit">(cm)</span></label>
+                <input type="number" id="height" step="0.1" min="0" required aria-label="Height">
             </div>
             <div class="button-group">
                 <button type="button" id="calculateBtn">Calculate BMI</button>
@@ -186,7 +204,7 @@
                 <button type="button" id="aboutBtn">About</button>
             </div>
         </form>
-        <div id="result">
+        <div id="result" role="alert" aria-live="polite">
             <div class="bmi-value" id="bmiValue"></div>
             <div class="diagnosis" id="diagnosis"></div>
             <div class="error" id="errorMsg"></div>
@@ -208,9 +226,7 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/service-worker.js')
-                    .then(reg => {
-                        console.log('Service Worker registered with scope:', reg.scope);
-                    })
+                    .then(reg => console.log('Service Worker registered:', reg.scope))
                     .catch(err => console.error('Service Worker registration failed:', err));
             });
         }
@@ -225,13 +241,30 @@
         const errorMsg = document.getElementById('errorMsg');
         const weightInput = document.getElementById('weight');
         const heightInput = document.getElementById('height');
+        const unitSystem = document.getElementById('unitSystem');
+        const weightUnit = document.getElementById('weightUnit');
+        const heightUnit = document.getElementById('heightUnit');
         const aboutModal = document.getElementById('aboutModal');
         const closeModal = document.getElementById('closeModal');
 
-        function calculateBMI(weight, height) {
+        let deferredPrompt;
+
+        function validateInputs(weight, height) {
+            const maxWeight = unitSystem.value === 'metric' ? 500 : 1100; // kg or lbs
+            const maxHeight = unitSystem.value === 'metric' ? 300 : 118;  // cm or inches
+            if (weight > maxWeight || height > maxHeight) {
+                throw new Error('Values exceed realistic human measurements');
+            }
+            return true;
+        }
+
+        function calculateBMI(weight, height, units) {
+            if (units === 'imperial') {
+                weight = weight * 0.453592; // lbs to kg
+                height = height * 2.54;     // inches to cm
+            }
             const heightInMeters = height / 100;
-            const bmi = weight / (heightInMeters * heightInMeters);
-            return bmi.toFixed(1);
+            return (weight / (heightInMeters * heightInMeters)).toFixed(1);
         }
 
         function getDiagnosis(bmi) {
@@ -243,26 +276,64 @@
             return 'Obese (Class III)';
         }
 
-        calculateBtn.addEventListener('click', () => {
-            resultDiv.style.display = 'none';
-            errorMsg.textContent = '';
-            const weight = parseFloat(weightInput.value);
-            const height = parseFloat(heightInput.value);
-            if (isNaN(weight) || isNaN(height)) {
-                errorMsg.textContent = 'Please enter valid numbers';
+        function saveLastCalculation(bmi, diagnosisText) {
+            localStorage.setItem('lastBMI', JSON.stringify({ 
+                bmi, 
+                diagnosis: diagnosisText, 
+                timestamp: Date.now(),
+                units: unitSystem.value
+            }));
+        }
+
+        function loadLastCalculation() {
+            const last = localStorage.getItem('lastBMI');
+            if (last) {
+                const { bmi, diagnosis, units } = JSON.parse(last);
+                unitSystem.value = units;
+                updateUnitLabels();
+                bmiValue.textContent = `BMI: ${bmi}`;
+                diagnosis.textContent = `Diagnosis: ${diagnosis}`;
                 resultDiv.style.display = 'block';
-                return;
             }
-            if (weight <= 0 || height <= 0) {
-                errorMsg.textContent = 'Please enter positive values';
+        }
+
+        function updateUnitLabels() {
+            weightUnit.textContent = unitSystem.value === 'metric' ? '(kg)' : '(lbs)';
+            heightUnit.textContent = unitSystem.value === 'metric' ? '(cm)' : '(in)';
+        }
+
+        calculateBtn.addEventListener('click', async () => {
+            try {
+                calculateBtn.classList.add('button-loading');
+                weightInput.classList.remove('input-error');
+                heightInput.classList.remove('input-error');
+                resultDiv.style.display = 'none';
+                errorMsg.textContent = '';
+
+                const weight = parseFloat(weightInput.value);
+                const height = parseFloat(heightInput.value);
+                
+                if (!weight || !height) throw new Error('Missing required values');
+                if (weight <= 0 || height <= 0) throw new Error('Values must be positive');
+                validateInputs(weight, height);
+
+                await new Promise(resolve => setTimeout(resolve, 300)); // Simulate processing
+                const bmi = calculateBMI(weight, height, unitSystem.value);
+                const diagText = getDiagnosis(parseFloat(bmi));
+                
+                bmiValue.textContent = `BMI: ${bmi}`;
+                diagnosis.textContent = `Diagnosis: ${diagText}`;
                 resultDiv.style.display = 'block';
-                return;
+                saveLastCalculation(bmi, diagText);
+            } catch (error) {
+                errorMsg.textContent = error.message;
+                resultDiv.style.display = 'block';
+                weightInput.classList.add('input-error');
+                heightInput.classList.add('input-error');
+                console.error('Calculation error:', error);
+            } finally {
+                calculateBtn.classList.remove('button-loading');
             }
-            const bmi = calculateBMI(weight, height);
-            const diagText = getDiagnosis(parseFloat(bmi));
-            bmiValue.textContent = `BMI: ${bmi}`;
-            diagnosis.textContent = `Diagnosis: ${diagText}`;
-            resultDiv.style.display = 'block';
         });
 
         resetBtn.addEventListener('click', () => {
@@ -272,6 +343,9 @@
             errorMsg.textContent = '';
             bmiValue.textContent = '';
             diagnosis.textContent = '';
+            weightInput.classList.remove('input-error');
+            heightInput.classList.remove('input-error');
+            localStorage.removeItem('lastBMI');
         });
 
         aboutBtn.addEventListener('click', () => {
@@ -283,15 +357,41 @@
         });
 
         updateBtn.addEventListener('click', () => {
-            console.log('Update button clicked');
-            // Force a full reload from the server, bypassing cache
             window.location.reload(true);
+        });
+
+        unitSystem.addEventListener('change', () => {
+            updateUnitLabels();
+            resultDiv.style.display = 'none';
         });
 
         window.addEventListener('click', (event) => {
             if (event.target === aboutModal) {
                 aboutModal.style.display = 'none';
             }
+        });
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const installBtn = document.createElement('button');
+            installBtn.textContent = 'Install App';
+            installBtn.addEventListener('click', () => {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    }
+                    deferredPrompt = null;
+                    installBtn.remove();
+                });
+            });
+            document.querySelector('.button-group').appendChild(installBtn);
+        });
+
+        window.addEventListener('load', () => {
+            loadLastCalculation();
+            updateUnitLabels();
         });
     </script>
 </body>
