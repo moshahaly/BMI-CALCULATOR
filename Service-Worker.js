@@ -1,21 +1,23 @@
-const CACHE_NAME = 'bmi-calculator-v6';
+const CACHE_NAME = `bmi-calculator-${new Date().toISOString()}`;
 const FILES_TO_CACHE = [
   '/',
   '/index.html',
   '/icon-192.png',
   '/icon-512.png',
-  '/manifest.json'
+  '/manifest.json',
+  '/offline.html'
 ];
 
 self.addEventListener('install', (event) => {
   console.log('Service Worker: Installing...');
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('Service Worker: Caching files');
-      return cache.addAll(FILES_TO_CACHE);
-    })
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.log('Service Worker: Caching core files');
+        return cache.addAll(FILES_TO_CACHE);
+      })
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -24,35 +26,56 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
+          if (cacheName !== CACHE_NAME && cacheName.startsWith('bmi-calculator-')) {
             console.log('Service Worker: Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') return;
+  
+  // Handle navigation requests
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match('/offline.html'))
+    );
+    return;
+  }
+
+  // For other requests, try network first
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+    fetch(event.request)
+      .then((networkResponse) => {
+        // Cache successful responses
+        if (networkResponse.ok) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(event.request, responseToCache));
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
         return networkResponse;
-      }).catch(() => {
-        return caches.match('/index.html');
-      });
-    })
+      })
+      .catch(() => {
+        // Fallback to cache
+        return caches.match(event.request)
+          .then((cachedResponse) => {
+            return cachedResponse || 
+              (event.request.headers.get('accept').includes('text/html') 
+                ? caches.match('/offline.html') 
+                : Promise.reject('No cache match'));
+          });
+      })
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

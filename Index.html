@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#ff99cc">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
     <title>Dr/Hadeer Salah Special BMI Calculator</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon-192.png">
-
     <style>
         * {
             margin: 0;
@@ -92,11 +92,14 @@
             font-size: 1.1rem;
             cursor: pointer;
             transition: all 0.3s ease;
+            min-width: 120px;
         }
 
-        button:hover {
+        button:hover, button:focus {
             background: #ff66b3;
             transform: translateY(-2px);
+            outline: 2px solid #ff3399;
+            outline-offset: 2px;
         }
 
         .button-loading {
@@ -108,6 +111,8 @@
         #resetBtn:hover { background: #ff3399; }
         #aboutBtn { background: #ff80bf; }
         #aboutBtn:hover { background: #ff4da6; }
+        .install-btn { background: #4CAF50; }
+        .install-btn:hover { background: #45a049; }
 
         #updateBtn {
             position: absolute;
@@ -149,6 +154,7 @@
             background: rgba(0, 0, 0, 0.5);
             justify-content: center;
             align-items: center;
+            z-index: 1000;
         }
 
         .modal-content {
@@ -176,16 +182,43 @@
         .modal-content p { margin: 1rem 0; color: #333; }
         .modal-content a { color: #ff3399; text-decoration: none; }
         .modal-content a:hover { text-decoration: underline; }
+
+        @media (max-width: 400px) {
+            .container {
+                padding: 1.5rem;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+            .button-group {
+                flex-direction: column;
+            }
+            button {
+                width: 100%;
+            }
+        }
+
+        #offline-status {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: none;
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Dr/Hadeer Salah Special BMI Calculator</h1>
-        <button type="button" id="updateBtn">Update</button>
+        <button type="button" id="updateBtn" aria-label="Update app">Update</button>
         <form id="bmiForm">
             <div class="input-group">
-                <label>Units:</label>
-                <select id="unitSystem">
+                <label for="unitSystem">Units:</label>
+                <select id="unitSystem" aria-label="Select unit system">
                     <option value="metric">Metric (kg/cm)</option>
                     <option value="imperial">Imperial (lbs/in)</option>
                 </select>
@@ -199,9 +232,9 @@
                 <input type="number" id="height" step="0.1" min="0" required aria-label="Height">
             </div>
             <div class="button-group">
-                <button type="button" id="calculateBtn">Calculate BMI</button>
-                <button type="button" id="resetBtn">Reset</button>
-                <button type="button" id="aboutBtn">About</button>
+                <button type="button" id="calculateBtn" aria-label="Calculate BMI">Calculate BMI</button>
+                <button type="button" id="resetBtn" aria-label="Reset form">Reset</button>
+                <button type="button" id="aboutBtn" aria-label="About this app">About</button>
             </div>
         </form>
         <div id="result" role="alert" aria-live="polite">
@@ -213,24 +246,18 @@
 
     <div id="aboutModal" class="modal">
         <div class="modal-content">
-            <button class="close-btn" id="closeModal">×</button>
-            <p>BMI-CALCULATOR version 1.0</p>
+            <button class="close-btn" id="closeModal" aria-label="Close modal">×</button>
+            <p>BMI-CALCULATOR version 1.1</p>
             <p>Based on most recent BMI classifications</p>
-            <p><a href="https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html" target="_blank">Learn more at CDC</a></p>
+            <p><a href="https://www.cdc.gov/bmi/adult-calculator/bmi-categories.html" target="_blank" rel="noopener">Learn more at CDC</a></p>
+            <p>App works offline!</p>
         </div>
     </div>
 
+    <div id="offline-status">You are currently offline</div>
+
     <script>
-        console.log('Script loaded');
-
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js')
-                    .then(reg => console.log('Service Worker registered:', reg.scope))
-                    .catch(err => console.error('Service Worker registration failed:', err));
-            });
-        }
-
+        // DOM Elements
         const calculateBtn = document.getElementById('calculateBtn');
         const resetBtn = document.getElementById('resetBtn');
         const aboutBtn = document.getElementById('aboutBtn');
@@ -246,29 +273,55 @@
         const heightUnit = document.getElementById('heightUnit');
         const aboutModal = document.getElementById('aboutModal');
         const closeModal = document.getElementById('closeModal');
+        const offlineStatus = document.getElementById('offline-status');
 
+        // App state
         let deferredPrompt;
+        let isOnline = navigator.onLine;
 
+        // Network status detection
+        window.addEventListener('online', () => {
+            isOnline = true;
+            offlineStatus.style.display = 'none';
+        });
+
+        window.addEventListener('offline', () => {
+            isOnline = false;
+            offlineStatus.style.display = 'block';
+        });
+
+        // Input validation
         function validateInputs(weight, height) {
-            const maxWeight = unitSystem.value === 'metric' ? 500 : 1100; // kg or lbs
-            const maxHeight = unitSystem.value === 'metric' ? 300 : 118;  // cm or inches
+            const maxWeight = unitSystem.value === 'metric' ? 500 : 1100;
+            const maxHeight = unitSystem.value === 'metric' ? 300 : 118;
+            const minWeight = unitSystem.value === 'metric' ? 10 : 22;
+            const minHeight = unitSystem.value === 'metric' ? 50 : 20;
+
             if (weight > maxWeight || height > maxHeight) {
                 throw new Error('Values exceed realistic human measurements');
+            }
+            if (weight < minWeight || height < minHeight) {
+                throw new Error('Values are below realistic human measurements');
             }
             return true;
         }
 
+        // BMI Calculation
         function calculateBMI(weight, height, units) {
             if (units === 'imperial') {
-                weight = weight * 0.453592; // lbs to kg
-                height = height * 2.54;     // inches to cm
+                weight = weight * 0.453592;
+                height = height * 2.54;
             }
             const heightInMeters = height / 100;
             return (weight / (heightInMeters * heightInMeters)).toFixed(1);
         }
 
+        // Diagnosis classification
         function getDiagnosis(bmi) {
-            if (bmi < 18.5) return 'Underweight';
+            if (isNaN(bmi)) return 'Invalid calculation';
+            if (bmi < 16) return 'Severe Thinness';
+            if (bmi < 17) return 'Moderate Thinness';
+            if (bmi < 18.5) return 'Mild Thinness';
             if (bmi < 25) return 'Normal Weight';
             if (bmi < 30) return 'Overweight';
             if (bmi < 35) return 'Obese (Class I)';
@@ -276,6 +329,7 @@
             return 'Obese (Class III)';
         }
 
+        // Save to localStorage
         function saveLastCalculation(bmi, diagnosisText) {
             localStorage.setItem('lastBMI', JSON.stringify({ 
                 bmi, 
@@ -285,24 +339,43 @@
             }));
         }
 
+        // Load from localStorage
         function loadLastCalculation() {
-            const last = localStorage.getItem('lastBMI');
-            if (last) {
-                const { bmi, diagnosis, units } = JSON.parse(last);
-                unitSystem.value = units;
-                updateUnitLabels();
-                bmiValue.textContent = `BMI: ${bmi}`;
-                diagnosis.textContent = `Diagnosis: ${diagnosis}`;
-                resultDiv.style.display = 'block';
+            try {
+                const last = localStorage.getItem('lastBMI');
+                if (last) {
+                    const data = JSON.parse(last);
+                    if (data.bmi && data.diagnosis && data.units) {
+                        unitSystem.value = data.units;
+                        updateUnitLabels();
+                        bmiValue.textContent = `BMI: ${data.bmi}`;
+                        diagnosis.textContent = `Diagnosis: ${data.diagnosis}`;
+                        resultDiv.style.display = 'block';
+                    }
+                }
+            } catch (e) {
+                console.error('Error loading last calculation', e);
             }
         }
 
+        // Update unit labels
         function updateUnitLabels() {
             weightUnit.textContent = unitSystem.value === 'metric' ? '(kg)' : '(lbs)';
             heightUnit.textContent = unitSystem.value === 'metric' ? '(cm)' : '(in)';
         }
 
-        calculateBtn.addEventListener('click', async () => {
+        // Debounce function for performance
+        function debounce(func, wait) {
+            let timeout;
+            return function() {
+                const context = this, args = arguments;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), wait);
+            };
+        }
+
+        // Calculate BMI handler
+        calculateBtn.addEventListener('click', debounce(async () => {
             try {
                 calculateBtn.classList.add('button-loading');
                 weightInput.classList.remove('input-error');
@@ -317,7 +390,7 @@
                 if (weight <= 0 || height <= 0) throw new Error('Values must be positive');
                 validateInputs(weight, height);
 
-                await new Promise(resolve => setTimeout(resolve, 300)); // Simulate processing
+                await new Promise(resolve => setTimeout(resolve, 300));
                 const bmi = calculateBMI(weight, height, unitSystem.value);
                 const diagText = getDiagnosis(parseFloat(bmi));
                 
@@ -328,14 +401,19 @@
             } catch (error) {
                 errorMsg.textContent = error.message;
                 resultDiv.style.display = 'block';
-                weightInput.classList.add('input-error');
-                heightInput.classList.add('input-error');
+                if (error.message.includes('weight', 'Weight')) {
+                    weightInput.classList.add('input-error');
+                }
+                if (error.message.includes('height', 'Height')) {
+                    heightInput.classList.add('input-error');
+                }
                 console.error('Calculation error:', error);
             } finally {
                 calculateBtn.classList.remove('button-loading');
             }
-        });
+        }, 300));
 
+        // Reset handler
         resetBtn.addEventListener('click', () => {
             weightInput.value = '';
             heightInput.value = '';
@@ -348,6 +426,7 @@
             localStorage.removeItem('lastBMI');
         });
 
+        // Modal handlers
         aboutBtn.addEventListener('click', () => {
             aboutModal.style.display = 'flex';
         });
@@ -356,26 +435,39 @@
             aboutModal.style.display = 'none';
         });
 
-        updateBtn.addEventListener('click', () => {
-            window.location.reload(true);
-        });
-
-        unitSystem.addEventListener('change', () => {
-            updateUnitLabels();
-            resultDiv.style.display = 'none';
-        });
-
         window.addEventListener('click', (event) => {
             if (event.target === aboutModal) {
                 aboutModal.style.display = 'none';
             }
         });
 
+        // Update handler
+        updateBtn.addEventListener('click', () => {
+            if (isOnline) {
+                window.location.reload(true);
+            } else {
+                errorMsg.textContent = 'Cannot update while offline';
+                resultDiv.style.display = 'block';
+            }
+        });
+
+        // Unit system change handler
+        unitSystem.addEventListener('change', () => {
+            updateUnitLabels();
+            resultDiv.style.display = 'none';
+        });
+
+        // PWA Installation
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
+            showInstallButton();
+        });
+
+        function showInstallButton() {
             const installBtn = document.createElement('button');
             installBtn.textContent = 'Install App';
+            installBtn.classList.add('install-btn');
             installBtn.addEventListener('click', () => {
                 deferredPrompt.prompt();
                 deferredPrompt.userChoice.then((choiceResult) => {
@@ -387,12 +479,35 @@
                 });
             });
             document.querySelector('.button-group').appendChild(installBtn);
-        });
+        }
 
+        // Initialize app
         window.addEventListener('load', () => {
             loadLastCalculation();
             updateUnitLabels();
+            if (!isOnline) {
+                offlineStatus.style.display = 'block';
+            }
         });
+
+        // Service Worker registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(reg => {
+                        console.log('Service Worker registered:', reg.scope);
+                        reg.addEventListener('updatefound', () => {
+                            const newWorker = reg.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    console.log('New content available - please refresh');
+                                }
+                            });
+                        });
+                    })
+                    .catch(err => console.error('Service Worker registration failed:', err));
+            });
+        }
     </script>
 </body>
 </html>
