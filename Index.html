@@ -9,6 +9,15 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon-192.png">
     <style>
+        .notification-btn {
+  background: #4CAF50 !important;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.notification-btn:hover {
+  background: #45a049 !important;
+}
         * {
             margin: 0;
             padding: 0;
@@ -509,5 +518,117 @@
             });
         }
     </script>
+    <script>
+        // Notification permission and handling
+        function requestNotificationPermission() {
+          return new Promise((resolve, reject) => {
+            if (!('Notification' in window)) {
+              reject('This browser does not support notifications');
+              return;
+            }
+      
+            if (Notification.permission === 'granted') {
+              resolve('granted');
+              return;
+            }
+      
+            if (Notification.permission !== 'denied') {
+              Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                  console.log('Notification permission granted');
+                  registerPushNotifications();
+                  resolve('granted');
+                } else {
+                  reject('Permission not granted');
+                }
+              });
+            } else {
+              reject('Permission previously denied');
+            }
+          });
+        }
+      
+        function registerPushNotifications() {
+          if ('serviceWorker' in navigator && 'PushManager' in window) {
+            navigator.serviceWorker.ready.then(registration => {
+              registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array('YOUR_VAPID_PUBLIC_KEY')
+              })
+              .then(subscription => {
+                console.log('Push subscription successful:', subscription);
+                // Send subscription to your server here
+                sendSubscriptionToServer(subscription);
+              })
+              .catch(error => {
+                console.error('Push subscription failed:', error);
+              });
+            });
+          }
+        }
+      
+        function urlBase64ToUint8Array(base64String) {
+          const padding = '='.repeat((4 - base64String.length % 4) % 4);
+          const base64 = (base64String + padding)
+            .replace(/-/g, '+')
+            .replace(/_/g, '/');
+      
+          const rawData = window.atob(base64);
+          const outputArray = new Uint8Array(rawData.length);
+      
+          for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+          }
+          return outputArray;
+        }
+      
+        function sendSubscriptionToServer(subscription) {
+          // Implement your server-side subscription handling here
+          console.log('Sending subscription to server:', subscription);
+          // Example:
+          // return fetch('/api/save-subscription', {
+          //   method: 'POST',
+          //   headers: { 'Content-Type': 'application/json' },
+          //   body: JSON.stringify(subscription)
+          // });
+        }
+      
+        // Add notification button to your UI
+        function addNotificationButton() {
+          const notifyBtn = document.createElement('button');
+          notifyBtn.textContent = 'Enable Notifications';
+          notifyBtn.classList.add('notification-btn');
+          notifyBtn.addEventListener('click', () => {
+            requestNotificationPermission()
+              .then(() => showNotification('Notifications Enabled', 'You will now receive important updates from BMI Calculator'))
+              .catch(err => console.error('Notification error:', err));
+          });
+          document.querySelector('.button-group').appendChild(notifyBtn);
+        }
+      
+        // Helper function to show notifications
+        function showNotification(title, body) {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            const options = {
+              body,
+              icon: 'icon-192.png',
+              badge: 'icon-192.png'
+            };
+            new Notification(title, options);
+          }
+        }
+      
+        // Initialize notifications when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+          if ('Notification' in window) {
+            addNotificationButton();
+            
+            // Example: Show welcome notification
+            if (Notification.permission === 'granted') {
+              showNotification('Welcome Back', 'Thanks for using BMI Calculator');
+            }
+          }
+        });
+      </script>
 </body>
 </html>
